@@ -7,7 +7,6 @@
 #include <functional>
 #include <memory>
 
-#include "CHOP_CPlusPlusBase.h"
 #include "CPlusPlus_Common.h"
 
 class ParManager;
@@ -41,6 +40,85 @@ protected:
 	std::string name, label, page;
 	
 	virtual void update(OP_Inputs* inputs) = 0;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+class PulsePar : public Par
+{
+public:
+
+	using Callback = std::function<void()>;
+
+	PulsePar(const std::string& name, const std::string& label = "", const std::string& page = "Custom")
+		: Par(name, label, page)
+	{
+		build(p);
+	}
+
+	OP_NumericParameter* getParameter() { return &p; }
+
+protected:
+
+	void update(OP_Inputs* inputs) override {}
+
+private:
+
+	friend class ParManager;
+
+	std::vector<double> value;
+	Callback callback;
+
+	OP_NumericParameter p;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+class TogglePar : public Par
+{
+public:
+
+	using Callback = std::function<void(bool)>;
+
+	TogglePar(const std::string& name, const std::string& label = "", const std::string& page = "Custom")
+		: Par(name, label, page)
+	{
+		build(p);
+	}
+
+	void setCallback(Callback callback) {
+		this->callback = callback;
+	}
+
+	OP_NumericParameter* getParameter() { return &p; }
+
+protected:
+
+	void update(OP_Inputs* inputs) override
+	{
+		bool changed = false;
+
+		auto v = inputs->getParInt(name.c_str(), 0) > 0;
+		if (v != value)
+		{
+			value = v;
+			changed = true;
+		}
+
+		if (changed && callback)
+		{
+			callback(value);
+		}
+	}
+
+private:
+
+	friend class ParManager;
+
+	bool value;
+	Callback callback;
+
+	OP_NumericParameter p;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -224,22 +302,6 @@ public:
 		parameters.push_back(&p);
 	}
 
-	void appendToggle(NumericPar& p,
-		NumericPar::Callback callback = NumericPar::Callback())
-	{
-		manager->appendToggle(*p.getParameter());
-		p.setCallback(callback);
-		parameters.push_back(&p);
-	}
-
-	void appendPulse(NumericPar& p,
-		NumericPar::Callback callback = NumericPar::Callback())
-	{
-		manager->appendPulse(*p.getParameter());
-		p.setCallback(callback);
-		pulse_parameters.push_back(&p);
-	}
-
 	void appendString(StringPar&p,
 		StringPar::Callback callback = StringPar::Callback())
 	{
@@ -260,14 +322,6 @@ public:
 		StringPar::Callback callback = StringPar::Callback())
 	{
 		manager->appendFolder(*p.getParameter());
-		p.setCallback(callback);
-		parameters.push_back(&p);
-	}
-
-	void appendDAT(StringPar&p,
-		StringPar::Callback callback = StringPar::Callback())
-	{
-		manager->appendDAT(*p.getParameter());
 		p.setCallback(callback);
 		parameters.push_back(&p);
 	}
@@ -304,6 +358,21 @@ public:
 		parameters.push_back(&p);
 	}
 
+	void appendToggle(TogglePar& p,
+		TogglePar::Callback callback = TogglePar::Callback())
+	{
+		manager->appendToggle(*p.getParameter());
+		p.setCallback(callback);
+		parameters.push_back(&p);
+	}
+
+	void appendPulse(PulsePar& p,
+		PulsePar::Callback callback = PulsePar::Callback())
+	{
+		manager->appendPulse(*p.getParameter());
+		pulse_parameters.push_back(&p);
+	}
+
 	//////////////////////////////////////////////////////////////////////////
 
 	void update(OP_Inputs* inputs);
@@ -313,5 +382,5 @@ private:
 
 	OP_ParameterManager* manager;
 	std::vector<Par*> parameters;
-	std::vector<NumericPar*> pulse_parameters;
+	std::vector<PulsePar*> pulse_parameters;
 };
